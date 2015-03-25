@@ -59,12 +59,16 @@ if( isset( $ed_date ) ) {
 										<input type="submit" id="view_data" name="view_data" value="View Data" class="button-primary btn-green">
 									</form>
 								</div>
-								
+
+								<a target="_blank" href="http://wp-analytify.com/upgrade-from-free" title="Upgrade to PRO to enjoy full features of Analytify.">
+									<img class="gray-areas" src="<?php echo plugins_url('images/live-stats-preview.png', dirname(__FILE__) );?>" width="100%" height="auto" alt="Upgrade to PRO to enjoy full features of Analytify." />
+								</a>
+
 								<?php
 
 								// General stats //
 
-								$stats = $wp_analytify->pa_get_analytics_dashboard( 'ga:sessions,ga:bounces,ga:newUsers,ga:entrances,ga:pageviews,ga:sessionDuration,ga:avgSessionDuration,ga:users', $start_date, $end_date);
+								$stats = $wp_analytify->pa_get_analytics_dashboard( 'ga:sessions,ga:bounces,ga:newUsers,ga:entrances,ga:pageviews,ga:sessionDuration,ga:avgTimeOnPage,ga:users', $start_date, $end_date);
 								if ( isset( $stats->totalsForAllResults ) ) {
 									include ANALYTIFY_ROOT_PATH . '/views/admin/general-stats.php'; 
 									pa_include_general($wp_analytify,$stats);

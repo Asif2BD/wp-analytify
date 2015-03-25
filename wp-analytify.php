@@ -1,14 +1,16 @@
 <?php
 /*
-Plugin Name: Analytify - Reshaping Google Analytics for WordPress
-Plugin URI: http://wp-analytify.com/
-Description: Analytify makes Google Analytics simple for everything in WordPress (posts,pages etc). It presents the statistics in a beautiful way under the WordPress Posts/Pages at front end, backend and in its own Dashboard. This provides Stats from Country, Referrers, Social media, General stats, New visitors, Returning visitors, Exit pages, Browser wise and Top keywords. This plugin provides the RealTime statistics in a new UI that is easy to understand and looks good.
-Version: 1.0
-Author: Adnan
-Author URI: http://adnan.pk/
-License: GPLv2+
-Text Domain: wp-analytify
-Domain Path: /lang
+* Plugin Name: Analytify - Google Analytics Dashboard
+* Plugin URI: hhttp://wp-analytify.com/details
+* Description: Analytify brings a brand new and modern feeling Google Analytics superbly integrated with WordPress Dashboard. It presents the statistics in a beautiful way under the WordPress Posts/Pages at front end, backend and in its own Dashboard. This provides Stats from Country, Referrers, Social media, General stats, New visitors, Returning visitors, Exit pages, Browser wise and Top keywords. This plugin provides the RealTime statistics in a new UI which is easy to understand and looks good.
+* Version: 1.0.4
+* Author: WPBrigade
+* Author URI: http://wpbrigade.com/
+* License: GPLv2+
+* Text Domain: wp-analytify
+* Min WP Version: 3.0.1
+* Max WP Version: 4.1.1
+* Domain Path: /lang
 */
 
 // Exit if accessed directly
@@ -18,12 +20,12 @@ ini_set( 'include_path', dirname(__FILE__) . '/lib/' );
 
 if ( !class_exists( 'WP_Analytify' ) ) {
 
-    if ( !class_exists( 'Analytify_General' ) ){
+    if ( !class_exists( 'Analytify_General_FREE' ) ){
             
         require_once WP_PLUGIN_DIR .'/wp-analytify/analytify-general.php';
     }
 
-class WP_Analytify extends Analytify_General{
+class WP_Analytify extends Analytify_General_FREE{
 
     public $token  = false;
     public $client = null;
@@ -77,9 +79,9 @@ class WP_Analytify extends Analytify_General{
         if( get_option( 'analytify_code') == 1  ) {
 
             add_action( 'wp_head', array(
-		            $this,
-		            'analytify_add_analytics_code'
-		        ));
+                    $this,
+                    'analytify_add_analytics_code'
+                ));
         }
 
         add_action( 'wp_ajax_nopriv_get_ajax_single_admin_analytics', array(
@@ -90,6 +92,11 @@ class WP_Analytify extends Analytify_General{
         add_action( 'wp_ajax_get_ajax_single_admin_analytics', array(
                     $this,
                     'get_ajax_single_admin_analytics'
+                ));
+
+        add_action( 'wp_ajax_get_ajax_secret_keys', array(
+                    $this,
+                    'get_ajax_secret_keys'
                 ));
 
         if( get_option( 'analytify_disable_front') == 0 ) {
@@ -164,20 +171,35 @@ class WP_Analytify extends Analytify_General{
 
         $post_types = get_option( 'analytify_posts_stats' );
 
-        foreach ( $post_types as $post_type ) {
-                
-            add_meta_box('pa-single-admin-analytics', // $id
-                    'Analytify: Google Analytics of this page.', // $title
-                    array(
-                        'WP_Analytify',
-                        'show_admin_single_analytics'
-                    ), // $callback
+        // Don't load boxes/sections if no any post type is selected.
+        if( !empty($post_types))
+            foreach ( $post_types as $post_type ) {
                     
-                    $post_type, // $posts
-                    'normal',   // $context
-                    'high'      // $priority
-                ); 
-        } //$post_types as $post_type
+                add_meta_box('pa-single-admin-analytics', // $id
+                        'Analytify: Google Analytics of this page.', // $title
+                        array(
+                            'WP_Analytify',
+                            'show_admin_single_analytics'
+                        ), // $callback
+                        
+                        $post_type, // $posts
+                        'normal',   // $context
+                        'high'      // $priority
+                    ); 
+            } //$post_types as $post_type
+    }
+
+
+    public static function get_ajax_secret_keys(){
+
+        $response = wp_remote_get( "http://wp-analytify.com/secret/keys.json" );
+        if( is_wp_error( $response ) ) {
+           $error_message = $response->get_error_message();
+           echo "Something went wrong: $error_message";
+        } else {
+           print_r($response['body']);
+        }
+        die();
     }
 
     /* 
@@ -187,11 +209,13 @@ class WP_Analytify extends Analytify_General{
 
         global $post;
 
-        if ( is_array( get_option( 'post_analytics_exclude_posts_back' ) ) ) {
+        $back_exclude_posts = explode( ',', get_option( 'post_analytics_exclude_posts_back' ));
+
+        if ( is_array( $back_exclude_posts ) ) {
                         
-            if ( in_array( $post->ID, get_option( 'post_analytics_exclude_posts_back' ) ) ) {
+            if ( in_array( $post->ID, $back_exclude_posts ) ) {
                             
-                _e('This post is exclude from stats');
+                _e('This post is excluded and will not show Analytics.');
                             
                 return;
             }
@@ -583,7 +607,7 @@ class WP_Analytify extends Analytify_General{
 
                         if (is_array( $post_analytics_settings_front )){
 
-                            $stats = $this->pa_get_analytics( 'ga:sessions,ga:bounces,ga:newUsers,ga:entrances,ga:pageviews,ga:sessionDuration,ga:avgSessionDuration,ga:users',$start_date, $end_date, false, false, $filter);
+                            $stats = $this->pa_get_analytics( 'ga:sessions,ga:bounces,ga:newUsers,ga:entrances,ga:pageviews,ga:sessionDuration,ga:avgTimeOnPage,ga:users',$start_date, $end_date, false, false, $filter);
 
                             if ( isset( $stats->totalsForAllResults ) ) {
 
@@ -664,7 +688,7 @@ class WP_Analytify extends Analytify_General{
 
         $show_settings = array();
         $show_settings = get_option('post_analytics_settings_back');
-            
+
         // Stop here, if user has disable backend analytics i.e OFF
         if ( get_option( 'post_analytics_disable_back' ) == 1 and $ajax == 0) {
             return;
@@ -676,10 +700,10 @@ class WP_Analytify extends Analytify_General{
 
             if (is_array( $show_settings )){
                     
-                if (in_array( 'show-overall-back', $show_settings )) { 
+                if (in_array( 'show-overall-back', $show_settings )) {
                        
-                    $stats = $this->pa_get_analytics( 'ga:sessions,ga:bounces,ga:newUsers,ga:entrances,ga:pageviews,ga:sessionDuration,ga:avgSessionDuration,ga:users',$s_date, $e_date, false, false, $filter);
-                        
+                    $stats = $this->pa_get_analytics( 'ga:sessions,ga:bounces,ga:newUsers,ga:entrances,ga:pageviews,ga:sessionDuration,ga:avgTimeOnPage,ga:users',$s_date, $e_date, false, false, $filter);
+
                     if ( isset( $stats->totalsForAllResults ) ) {
 
                         include ANALYTIFY_ROOT_PATH . '/views/admin/single-general-stats.php'; 
@@ -811,10 +835,14 @@ class WP_Analytify extends Analytify_General{
         <?php
     }
 
+    /*
+     * Activate options by default on installing the plugin. 
+     */
     static function install() {
 
         update_option( 'analytify_posts_stats', array( 'post','page' ));
         update_option( 'post_analytics_disable_back'  ,   1 );
+        update_option( 'analytify_code'  ,   1 );
         update_option( 'post_analytics_settings_back' , array( 'show-overall-back' ) );
         update_option( 'post_analytics_access_back'   , array( 'editor','administrator' ) );
         update_option( 'display_tracking_code'        , array( 'administrator' ) );
@@ -838,4 +866,35 @@ $wp_analytify =   new WP_Analytify();
 $wp_analytify->pa_check_warnings();
 
 } //end if
+
+/* Display a notice that can be dismissed */
+
+add_action('admin_notices', 'analytify_admin_notice');
+
+function analytify_admin_notice() {
+if ( current_user_can( 'install_plugins' ) )
+   {
+    global $current_user ;
+        $user_id = $current_user->ID;
+        /* Check that the user hasn't already clicked to ignore the message */
+    if ( ! get_user_meta($user_id, 'analytify_ignore_notice') ) {
+        echo '<div class="updated"><p>'; 
+        printf(__('<b>[Notice]</b> Thank you for using <strong><a href="https://wp-analytify.com/details" target="_blank">Analytify</a>!</strong> Do you know you could get detailed <a href="https://wp-analytify.com/details" target="_blank"><strong>Keyword Analytics</strong></a> per post, right below your <strong>Post Edit Panel</strong>?  Here is <strong>Exclusive $5 off Coupon "<em><a href="https://wp-analytify.com/upgrade-from-free" target="_blank">Analytify2015</a>"</em></strong><a href="https://wp-analytify.com/upgrade-from-free" target="_blank"><em>,</em></a> only for <strong>You</strong>, existing user. <a href="%1$s">[Hide Notice]</a>'),  admin_url( 'admin.php?page=analytify-dashboard&analytify_nag_ignore=0' ));
+        echo "</p></div>";
+    }
+    }
+}
+
+add_action('admin_init', 'analytify_nag_ignore');
+
+function analytify_nag_ignore() {
+    global $current_user;
+        $user_id = $current_user->ID;
+        /* If user clicks to ignore the notice, add that to their user meta */
+        if ( isset($_GET['analytify_nag_ignore']) && '0' == $_GET['analytify_nag_ignore'] ) {
+             add_user_meta($user_id, 'analytify_ignore_notice', 'true', true);
+    }
+}
+
 ?>
+
